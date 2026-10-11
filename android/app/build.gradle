@@ -1,0 +1,109 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.v2ray.ai'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.v2ray.ai"
+        minSdk 26 
+        targetSdk 34
+        versionCode 1
+        versionName "1.0"
+        
+        ndk {
+            abiFilters 'arm64-v8a', 'armeabi-v7a', 'x86_64'
+        }
+
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    
+    sourceSets {
+        main {
+            assets.srcDirs = ['src/main/assets']
+            jniLibs.srcDirs = ['libs']
+        }
+    }
+    packagingOptions {
+        jniLibs {
+            useLegacyPackaging = true
+            pickFirst 'lib/arm64-v8a/libv2ray.so'
+            pickFirst 'lib/armeabi-v7a/libv2ray.so'
+            pickFirst 'lib/x86_64/libv2ray.so'
+        }
+    }
+}
+
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'com.google.android.material:material:1.11.0'
+    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+    implementation 'androidx.webkit:webkit:1.9.0'
+    implementation 'com.google.code.gson:gson:2.10.1'
+
+    implementation fileTree(dir: 'libs', include: ['*.aar', '*.jar'])
+}
+
+import org.apache.tools.ant.taskdefs.condition.Os
+
+task installReactDependencies(type: Exec) {
+    workingDir '../../'
+    if (Os.isFamily(Os.FAMILY_WINDOWS)) {
+        commandLine 'cmd', '/c', 'npm', 'install'
+    } else {
+        commandLine 'npm', 'install'
+    }
+}
+
+task buildReactApp(type: Exec) {
+    dependsOn installReactDependencies
+    workingDir '../../'
+    if (Os.isFamily(Os.FAMILY_WINDOWS)) {
+        commandLine 'cmd', '/c', 'npm', 'run', 'build'
+    } else {
+        commandLine 'npm', 'run', 'build'
+    }
+}
+
+task copyReactAssets(type: Copy) {
+    dependsOn buildReactApp
+    from '../../dist'
+    into 'src/main/assets'
+}
+
+task downloadRoutingAssets {
+    doLast {
+        def assetsDir = file('src/main/assets')
+        if (!assetsDir.exists()) {
+            assetsDir.mkdirs()
+        }
+        def geoipFile = new File(assetsDir, 'geoip.dat')
+        if (!geoipFile.exists()) {
+            try {
+                ant.get(src: 'https://cdn.jsdelivr.net/gh/Loyalsoldier/v2ray-rules-dat@release/geoip.dat', dest: geoipFile)
+            } catch (Exception e) {}
+        }
+        def geositeFile = new File(assetsDir, 'geosite.dat')
+        if (!geositeFile.exists()) {
+            try {
+                ant.get(src: 'https://cdn.jsdelivr.net/gh/Loyalsoldier/v2ray-rules-dat@release/geosite.dat', dest: geositeFile)
+            } catch (Exception e) {}
+        }
+    }
+}
+
+preBuild.dependsOn downloadRoutingAssets
+preBuild.dependsOn copyReactAssets

@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>V2Ray AI Manager - Ni4ray</title>
+    <meta name="description" content="A progressive web application concept for managing V2Ray configurations. Features AI-powered config analysis, QR code generation, and a simulated VPN dashboard interface designed for mobile users." />
+    <meta property="og:title" content="V2Ray AI Manager - Ni4ray" />
+    <meta property="og:description" content="A progressive web application concept for managing V2Ray configurations. Features AI-powered config analysis, QR code generation, and a simulated VPN dashboard interface designed for mobile users." />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Inter', 'sans-serif'],
+            },
+            colors: {
+              gray: {
+                750: '#2d3748',
+                850: '#1a202c',
+                950: '#0d1117',
+              },
+              primary: {
+                500: '#3b82f6',
+                600: '#2563eb',
+              },
+              accent: {
+                500: '#8b5cf6', // Violet for Hiddify feel
+                600: '#7c3aed',
+              }
+            },
+            animation: {
+              'pulse-fast': 'pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+              'spin-slow': 'spin 3s linear infinite',
+            }
+          }
+        }
+      }
+    </script>
+    <style>
+      body {
+        background-color: #0d1117;
+        color: #e2e8f0;
+        -webkit-tap-highlight-color: transparent;
+      }
+      /* Light theme: scoped overrides, dark markup untouched */
+      .theme-light { background-color: #f1f5f9 !important; color: #0f172a !important; }
+      .theme-light body { background-color: #f1f5f9; }
+      .theme-light main { background-color: #f1f5f9 !important; }
+      .theme-light .bg-\[\#0d1117\], .theme-light .bg-\[\#0b0e14\] { background-color: #ffffff !important; }
+      .theme-light .bg-gray-900, .theme-light .bg-gray-800\/40, .theme-light .bg-gray-800\/50,
+      .theme-light .bg-gray-800\/30, .theme-light .bg-gray-800\/60 { background-color: #ffffff !important; border-color: #e2e8f0 !important; }
+      .theme-light .bg-gray-900\/50 { background-color: #f8fafc !important; }
+      .theme-light .border-gray-800, .theme-light .border-gray-700, .theme-light .border-gray-700\/50 { border-color: #e2e8f0 !important; }
+      .theme-light .text-white, .theme-light .text-gray-100, .theme-light .text-gray-200 { color: #0f172a !important; }
+      .theme-light .text-gray-400, .theme-light .text-gray-500 { color: #64748b !important; }
+      .theme-light .text-gray-600, .theme-light .text-gray-700 { color: #94a3b8 !important; }
+      .theme-light nav { background-color: #ffffff !important; border-color: #e2e8f0 !important; }
+      .theme-light input, .theme-light textarea, .theme-light select { background-color: #f8fafc !important; color: #0f172a !important; border-color: #cbd5e1 !important; }
+      /* Light theme: auto-generated coverage for all dark utilities in use */
+      .theme-light .bg-\[\#0d1117\]\/90 { background-color: rgba(255,255,255,.9) !important; }
+      .theme-light .bg-gray-800 { background-color: #ffffff !important; }
+      .theme-light .bg-gray-900 { background-color: #f8fafc !important; }
+      .theme-light .bg-gray-700 { background-color: #e2e8f0 !important; }
+      .theme-light .bg-primary-600 { background-color: #2563eb !important; }
+      .theme-light .hover\:bg-gray-800\/60:hover, .theme-light .hover\:bg-gray-700:hover,
+      .theme-light .hover\:bg-gray-800:hover { background-color: #f1f5f9 !important; }
+      .theme-light .hover\:text-gray-200:hover, .theme-light .hover\:text-gray-300:hover { color: #0f172a !important; }
+      .theme-light .text-gray-300 { color: #334155 !important; }
+      .theme-light .text-primary-500, .theme-light .text-primary-400 { color: #2563eb !important; }
+      .theme-light .text-green-400, .theme-light .text-green-500 { color: #16a34a !important; }
+      .theme-light .text-yellow-400 { color: #ca8a04 !important; }
+      .theme-light .text-purple-300 { color: #7c3aed !important; }
+      .theme-light .text-blue-300 { color: #2563eb !important; }
+      .theme-light .text-cyan-300, .theme-light .text-cyan-400 { color: #0891b2 !important; }
+      .theme-light .bg-green-900\/30 { background-color: #dcfce7 !important; }
+      .theme-light .bg-yellow-900\/30 { background-color: #fef9c3 !important; }
+      .theme-light .bg-purple-900\/50 { background-color: #ede9fe !important; border-color: #c4b5fd !important; }
+      .theme-light .bg-blue-900\/50 { background-color: #dbeafe !important; border-color: #93c5fd !important; }
+      .theme-light .border-purple-700 { border-color: #c4b5fd !important; }
+      .theme-light .border-blue-700 { border-color: #93c5fd !important; }
+      .theme-light .border-primary-500 { border-color: #2563eb !important; }
+      .theme-light .from-gray-700, .theme-light .to-gray-800 { --tw-gradient-from: #e2e8f0 !important; --tw-gradient-to: #cbd5e1 !important; }
+      .theme-light .shadow-\[0_0_15px_rgba\(59\,130\,246\,0\.2\)\] { box-shadow: 0 0 15px rgba(37,99,235,.15) !important; }
+      .theme-light .bg-gradient-to-tr, .theme-light .bg-gradient-to-br { color: #ffffff !important; }
+      .theme-light .bg-gradient-to-tr .text-white, .theme-light .bg-gradient-to-br .text-white { color: #ffffff !important; }
+      .theme-light .text-white\/70, .theme-light .text-white\/80 { color: rgba(15,23,42,.7) !important; }
+      /* Hide scrollbar for Chrome, Safari and Opera */
+      .no-scrollbar::-webkit-scrollbar {
+        display: none;
+      }
+      /* Hide scrollbar for IE, Edge and Firefox */
+      .no-scrollbar {
+        -ms-overflow-style: none;  /* IE and Edge */
+        scrollbar-width: none;  /* Firefox */
+      }
+    </style>
+
+  <script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@^19.2.4",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
+    "react/": "https://esm.sh/react@^19.2.4/",
+    "@google/genai": "https://esm.sh/@google/genai@^1.41.0",
+    "lucide-react": "https://esm.sh/lucide-react@^0.574.0",
+    "recharts": "https://esm.sh/recharts@^3.7.0",
+    "vite": "https://esm.sh/vite@^7.3.1",
+    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.4"
+  }
+}
+</script>
+  <script type="module" crossorigin src="./assets/index-BR1QG1u7.js"></script>
+</head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>
