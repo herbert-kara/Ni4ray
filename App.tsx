@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ServerConfig, Subscription, AppTab, AppSettings, DEFAULT_SETTINGS } from './types';
 import Dashboard from './components/Dashboard';
 import ServerList from './components/ServerList';
@@ -38,8 +38,6 @@ const App: React.FC = () => {
   const [selectedServer, setSelectedServer] = useState<ServerConfig | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [showToast, setShowToast] = useState(false);
-  // Resolves when the native VPN reports connected (used by ensureTunnel).
-  const connectWaiterRef = useRef<((up: boolean) => void) | null>(null);
 
   // Persistence Effects
   useEffect(() => {
@@ -67,11 +65,6 @@ const App: React.FC = () => {
           setIsConnected(true);
           setShowToast(true);
           setTimeout(() => setShowToast(false), 3000);
-          connectWaiterRef.current?.(true);
-          connectWaiterRef.current = null;
-      };
-      (window as any).onVpnDisconnected = () => {
-          setIsConnected(false);
       };
       
       (window as any).onVpnPermissionDenied = () => {
@@ -128,39 +121,6 @@ const App: React.FC = () => {
     }
   };
 
-  // Bring the tunnel up if it's down — lets the ping/test flow measure latency
-  // through the tunnel on a filtered network (direct pings are blocked there).
-  // Resolves true once onVpnConnected fires, false on timeout / no selected server.
-  const ensureTunnel = useCallback(async (): Promise<boolean> => {
-    if (isConnected) return true;
-    if (!selectedServer) {
-      nativeShowToast("Select a server first");
-      return false;
-    }
-    return new Promise<boolean>((resolve) => {
-      connectWaiterRef.current = resolve;
-      try {
-        const cfg = generateV2RayConfig(selectedServer, settings);
-        window.Android?.connect(cfg);
-      } catch {
-        connectWaiterRef.current = null;
-        resolve(false);
-        return;
-      }
-      setTimeout(() => {
-        if (connectWaiterRef.current === resolve) {
-          connectWaiterRef.current = null;
-          resolve(false);
-        }
-      }, 20000);
-    });
-  }, [isConnected, selectedServer, settings]);
-
-  const releaseTunnel = useCallback(() => {
-    window.Android?.disconnect();
-    setIsConnected(false);
-  }, []);
-
   const handleAddSubscription = (sub: Subscription, newServers: ServerConfig[]) => {
       const uniqueNewServers = newServers.filter(ns => !servers.some(s => s.rawLink === ns.rawLink));
       setSubscriptions(prev => [...prev, sub]);
@@ -212,9 +172,6 @@ const App: React.FC = () => {
             servers={servers}
             subscriptions={subscriptions}
             selectedId={selectedServer?.id || null}
-            isConnected={isConnected}
-            ensureTunnel={ensureTunnel}
-            releaseTunnel={releaseTunnel}
             onSelect={(s) => {
                 setSelectedServer(s);
                 nativeShowToast(s.protocol === 'balancer' ? `Mode: ${s.name}` : `Selected ${s.name}`);

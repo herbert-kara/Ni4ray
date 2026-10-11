@@ -364,43 +364,18 @@ public class MainActivity extends AppCompatActivity {
                     String host = extractOutboundHost(configJson);
                     int port = extractOutboundPort(configJson);
                     if (host != null && port > 0) {
+                        // v2rayNG-style tcping: direct TCP connect, no tunnel.
+                        // The app is excluded from the TUN (addDisallowedApplication),
+                        // so this measures the true device→server latency whether
+                        // or not the VPN is running. System DNS first, DoH fallback.
+                        String ip = resolveHost(host);
+                        if (ip == null || ip.isEmpty()) ip = host;
+                        Log.i("Ni4rayPing", "probe direct " + ip + ":" + port);
                         long t0 = System.nanoTime();
-                        if (sTunnelUp) {
-                            // Plain Socket has no HTTP-proxy support on Android
-                            // (SOCKS only) — run the CONNECT handshake against
-                            // the app-proxy inbound ourselves. Retry a few
-                            // times: the core may still be starting when the
-                            // first probe fires (onVpnConnected is optimistic).
-                            Log.i("Ni4rayPing", "probe via tunnel " + host + ":" + port);
-                            for (int attempt = 0; attempt < 3 && ms < 0; attempt++) {
-                                try (java.net.Socket p = new java.net.Socket()) {
-                                    p.connect(new java.net.InetSocketAddress("127.0.0.1", 10809), 2000);
-                                    p.setSoTimeout(5000);
-                                    java.io.OutputStream os = p.getOutputStream();
-                                    String crlf = String.valueOf((char) 13) + (char) 10;
-                                    String req = "CONNECT " + host + ":" + port + " HTTP/1.1" + crlf + "Host: " + host + ":" + port + crlf + crlf;
-                                    os.write(req.getBytes("UTF-8"));
-                                    os.flush();
-                                    String line = new java.io.BufferedReader(
-                                            new java.io.InputStreamReader(p.getInputStream(), "UTF-8")).readLine();
-                                    Log.i("Ni4rayPing", "proxy try=" + attempt + " resp=" + line);
-                                    if (line != null && line.contains("200")) ms = (System.nanoTime() - t0) / 1_000_000L;
-                                } catch (Exception e) {
-                                    Log.i("Ni4rayPing", "proxy try=" + attempt + " err=" + e);
-                                }
-                                if (ms < 0) Thread.sleep(400);
-                            }
-                        } else {
-                            // System DNS first, DoH fallback — the device's own
-                            // resolver can't answer for most of these domains.
-                            String ip = resolveHost(host);
-                            if (ip == null || ip.isEmpty()) ip = host;
-                            Log.i("Ni4rayPing", "probe direct " + ip + ":" + port);
-                            try (java.net.Socket s = new java.net.Socket()) {
-                                s.connect(new java.net.InetSocketAddress(ip, port), 6000);
-                            }
-                            ms = (System.nanoTime() - t0) / 1_000_000L;
+                        try (java.net.Socket s = new java.net.Socket()) {
+                            s.connect(new java.net.InetSocketAddress(ip, port), 2000);
                         }
+                        ms = (System.nanoTime() - t0) / 1_000_000L;
                     }
                 } catch (Exception ignored) {
                     ms = -1;
@@ -424,8 +399,11 @@ public class MainActivity extends AppCompatActivity {
                     if (ob == null) continue;
                     org.json.JSONObject settings = ob.optJSONObject("settings");
                     if (settings == null) continue;
-                    org.json.JSONObject vnext = settings.optJSONObject("vnext");
-                    if (vnext != null && vnext.has("port")) return vnext.optInt("port", 0);
+                    org.json.JSONArray vnext = settings.optJSONArray("vnext");
+                    if (vnext != null && vnext.length() > 0) {
+                        org.json.JSONObject v = vnext.optJSONObject(0);
+                        if (v != null && v.has("port")) return v.optInt("port", 0);
+                    }
                     org.json.JSONArray servers = settings.optJSONArray("servers");
                     if (servers != null && servers.length() > 0) {
                         org.json.JSONObject sv = servers.optJSONObject(0);
