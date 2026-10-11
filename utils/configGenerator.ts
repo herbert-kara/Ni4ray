@@ -198,6 +198,13 @@ export const generateV2RayConfig = (server: ServerConfig, settings?: AppSettings
         port: 10823,
         protocol: "dokodemo-door",
         settings: { address: "127.0.0.1" }
+      },
+      {
+        tag: "app-proxy",
+        listen: "127.0.0.1",
+        port: 10809,
+        protocol: "http",
+        settings: {}
       }
     ],
     outbounds: [
@@ -220,6 +227,11 @@ export const generateV2RayConfig = (server: ServerConfig, settings?: AppSettings
           type: "field",
           inboundTag: ["api"],
           outboundTag: "api"
+        },
+        {
+          type: "field",
+          inboundTag: ["app-proxy"],
+          outboundTag: "proxy"
         },
         ...routingRules
       ]

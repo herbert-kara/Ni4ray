@@ -9,6 +9,9 @@ interface ServerListProps {
   servers: ServerConfig[];
   subscriptions: Subscription[];
   selectedId: string | null;
+  isConnected: boolean;
+  ensureTunnel: () => Promise<boolean>;
+  releaseTunnel: () => void;
   onSelect: (server: ServerConfig) => void;
   onDeleteServer: (id: string) => void;
   onAddSubscription: (sub: Subscription, servers: ServerConfig[]) => void;
@@ -20,6 +23,9 @@ const ServerList: React.FC<ServerListProps> = ({
   servers, 
   subscriptions, 
   selectedId, 
+  isConnected,
+  ensureTunnel,
+  releaseTunnel,
   onSelect, 
   onDeleteServer, 
   onAddSubscription,
@@ -40,7 +46,15 @@ const ServerList: React.FC<ServerListProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [pingingId, setPingingId] = useState<string | null>(null);
-  const [latency, setLatency] = useState<Record<string, number>>({});
+  const [latency, setLatency] = useState<Record<string, number>>(() => {
+      const s = localStorage.getItem('nim4ray_latency');
+      return s ? JSON.parse(s) : {};
+  });
+
+  // Keep measured pings across app restarts (they don't live in the server list itself).
+  useEffect(() => {
+      localStorage.setItem('nim4ray_latency', JSON.stringify(latency));
+  }, [latency]);
 
   // Special Balancer Configurations
   const balancerLowest: ServerConfig = {
@@ -222,17 +236,22 @@ const ServerList: React.FC<ServerListProps> = ({
 
   const handlePing = async (server: ServerConfig) => {
       if (pingingId) return;
+      const wasDown = !isConnected;
+      if (!(await ensureTunnel())) {
+          nativeShowToast(isAndroid() ? "Ping failed" : "Ping needs the Android app");
+          return;
+      }
       setPingingId(server.id);
       try {
           const ms = await requestOne(server);
           if (ms !== null) {
               setLatency(prev => ({ ...prev, [server.id]: Math.round(ms) }));
-              onSelect({ ...server, latency: Math.round(ms) });
           } else {
               nativeShowToast(isAndroid() ? "Ping failed" : "Ping needs the Android app");
           }
       } finally {
           setPingingId(null);
+          if (wasDown) releaseTunnel();
       }
   };
 
@@ -247,18 +266,23 @@ const ServerList: React.FC<ServerListProps> = ({
   // Measure every server one by one (sequential — the core handles one test config at a time).
   const handlePingAll = async () => {
       if (pingingId || servers.length === 0) return;
+      const wasDown = !isConnected;
+      if (!(await ensureTunnel())) {
+          nativeShowToast("Could not start tunnel to ping");
+          return;
+      }
       for (const s of servers) {
           if (s.protocol === 'balancer') continue;
           setPingingId(s.id);
           try {
               const ms = await requestOne(s);
-              if (ms !== null) {
-                  setLatency(prev => ({ ...prev, [s.id]: Math.round(ms) }));
-                  onSelect({ ...s, latency: Math.round(ms) });
-              }
+                if (ms !== null) {
+                    setLatency(prev => ({ ...prev, [s.id]: Math.round(ms) }));
+                }
           } catch { /* next server */ }
       }
       setPingingId(null);
+      if (wasDown) releaseTunnel();
       nativeShowToast("Latency test done");
   };
 

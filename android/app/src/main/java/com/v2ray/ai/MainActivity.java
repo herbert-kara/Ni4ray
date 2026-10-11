@@ -24,6 +24,9 @@ public class MainActivity extends AppCompatActivity {
     private WebView webView;
     private String pendingConfig; // xray JSON waiting for VPN permission
     private String pendingName;
+    // Set while the tunnel is up so app HTTP (IP lookup, etc.) routes through the
+    // local proxy inbound (127.0.0.1:10809) and exits via the server, not the device.
+    private static volatile boolean sTunnelUp = false;
 
     // Launcher for the VPN permission dialog
     private final ActivityResultLauncher<Intent> vpnPermissionLauncher =
@@ -287,6 +290,7 @@ public class MainActivity extends AppCompatActivity {
 
         @JavascriptInterface
         public void disconnect() {
+            sTunnelUp = false;
             Intent intent = new Intent(mContext, V2RayProxyService.class);
             intent.setAction("STOP");
             mContext.startService(intent);
@@ -360,15 +364,43 @@ public class MainActivity extends AppCompatActivity {
                     String host = extractOutboundHost(configJson);
                     int port = extractOutboundPort(configJson);
                     if (host != null && port > 0) {
-                        // System DNS first, DoH fallback — the device's own
-                        // resolver can't answer for most of these domains.
-                        String ip = resolveHost(host);
-                        if (ip == null || ip.isEmpty()) ip = host;
                         long t0 = System.nanoTime();
-                        try (java.net.Socket s = new java.net.Socket()) {
-                            s.connect(new java.net.InetSocketAddress(ip, port), 6000);
+                        if (sTunnelUp) {
+                            // Plain Socket has no HTTP-proxy support on Android
+                            // (SOCKS only) — run the CONNECT handshake against
+                            // the app-proxy inbound ourselves. Retry a few
+                            // times: the core may still be starting when the
+                            // first probe fires (onVpnConnected is optimistic).
+                            Log.i("Ni4rayPing", "probe via tunnel " + host + ":" + port);
+                            for (int attempt = 0; attempt < 3 && ms < 0; attempt++) {
+                                try (java.net.Socket p = new java.net.Socket()) {
+                                    p.connect(new java.net.InetSocketAddress("127.0.0.1", 10809), 2000);
+                                    p.setSoTimeout(5000);
+                                    java.io.OutputStream os = p.getOutputStream();
+                                    String crlf = String.valueOf((char) 13) + (char) 10;
+                                    String req = "CONNECT " + host + ":" + port + " HTTP/1.1" + crlf + "Host: " + host + ":" + port + crlf + crlf;
+                                    os.write(req.getBytes("UTF-8"));
+                                    os.flush();
+                                    String line = new java.io.BufferedReader(
+                                            new java.io.InputStreamReader(p.getInputStream(), "UTF-8")).readLine();
+                                    Log.i("Ni4rayPing", "proxy try=" + attempt + " resp=" + line);
+                                    if (line != null && line.contains("200")) ms = (System.nanoTime() - t0) / 1_000_000L;
+                                } catch (Exception e) {
+                                    Log.i("Ni4rayPing", "proxy try=" + attempt + " err=" + e);
+                                }
+                                if (ms < 0) Thread.sleep(400);
+                            }
+                        } else {
+                            // System DNS first, DoH fallback — the device's own
+                            // resolver can't answer for most of these domains.
+                            String ip = resolveHost(host);
+                            if (ip == null || ip.isEmpty()) ip = host;
+                            Log.i("Ni4rayPing", "probe direct " + ip + ":" + port);
+                            try (java.net.Socket s = new java.net.Socket()) {
+                                s.connect(new java.net.InetSocketAddress(ip, port), 6000);
+                            }
+                            ms = (System.nanoTime() - t0) / 1_000_000L;
                         }
-                        ms = (System.nanoTime() - t0) / 1_000_000L;
                     }
                 } catch (Exception ignored) {
                     ms = -1;
@@ -455,7 +487,14 @@ public class MainActivity extends AppCompatActivity {
         private String fetchUrlSync(String url) {
             java.net.HttpURLConnection conn = null;
             try {
-                conn = (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
+                java.net.URL u = new java.net.URL(url);
+                // While the tunnel is up the app is excluded from it, so route this
+                // request through the local HTTP proxy inbound (127.0.0.1:10809) to
+                // exit via the server. When down, go direct.
+                java.net.Proxy proxy = sTunnelUp
+                        ? new java.net.Proxy(java.net.Proxy.Type.HTTP, new java.net.InetSocketAddress("127.0.0.1", 10809))
+                        : java.net.Proxy.NO_PROXY;
+                conn = (java.net.HttpURLConnection) u.openConnection(proxy);
                 conn.setConnectTimeout(8000);
                 conn.setReadTimeout(8000);
                 conn.setInstanceFollowRedirects(true);
@@ -489,6 +528,7 @@ public class MainActivity extends AppCompatActivity {
         intent.putExtra("CONFIG", configJson);
         intent.putExtra("NAME", name != null ? name : "Ni4ray");
         startService(intent);
+        sTunnelUp = true;
         Toast.makeText(this, "VPN Service Started", Toast.LENGTH_SHORT).show();
         // Notify JS that connection started
         webView.post(() -> webView.evaluateJavascript("window.onVpnConnected && window.onVpnConnected()", null));
