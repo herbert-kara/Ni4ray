@@ -245,6 +245,9 @@ const ServerList: React.FC<ServerListProps> = ({
 
   const serverLatency = (s: ServerConfig) => latency[s.id] ?? s.latency;
 
+  const pingTone = (ms?: number) =>
+    ms == null ? 'text-gray-500' : ms <= 150 ? 'text-emerald-400' : ms <= 400 ? 'text-amber-400' : 'text-red-400';
+
   // Sort by measured ping: fastest first, never-measured last.
   const [sortByPing, setSortByPing] = useState(false);
   const visibleServers = sortByPing
@@ -430,8 +433,8 @@ const ServerList: React.FC<ServerListProps> = ({
                   title="Measure real latency"
                   className="flex items-center gap-1 text-xs font-mono shrink-0 hover:bg-gray-700 rounded px-1.5 py-1 transition-colors disabled:opacity-50"
                 >
-                  <Signal size={12} className={serverLatency(server) ? "text-green-400" : "text-gray-500"} />
-                  <span className={serverLatency(server) ? "text-green-400" : "text-gray-500"}>
+                  <Signal size={12} className={pingTone(serverLatency(server))} />
+                  <span className={pingTone(serverLatency(server))}>
                     {pingingId === server.id ? '...' : serverLatency(server) ? `${serverLatency(server)}ms` : 'ping'}
                   </span>
                 </button>
@@ -439,9 +442,9 @@ const ServerList: React.FC<ServerListProps> = ({
               
               {/* Actions Row */}
               <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-700/50">
-                <div className="text-[10px] text-gray-500 font-mono">
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-gray-900 text-primary-400 border border-gray-700">
                     {server.protocol.toUpperCase()}
-                </div>
+                </span>
                 <button 
                     onClick={(e) => { e.stopPropagation(); onDeleteServer(server.id); }}
                     className="p-1.5 text-gray-400 hover:text-red-400 hover:bg-gray-700 rounded-full transition-colors"
