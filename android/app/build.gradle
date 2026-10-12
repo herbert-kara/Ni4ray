@@ -7,7 +7,7 @@ android {
     compileSdk 34
 
     defaultConfig {
-        applicationId "com.v2ray.ai"
+        applicationId "com.ni4ray.app"
         minSdk 26 
         targetSdk 34
         versionCode 1
